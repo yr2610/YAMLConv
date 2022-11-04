@@ -24,7 +24,12 @@ namespace YAMLConvDNA
 {
     public class MyAddin : IExcelAddIn
     {
+        Office.CommandBarButton exampleMenuItem;
         Application xlApp = (Application)ExcelDnaUtil.Application;
+
+        // XXX: ここで持っておかないとガベコレされることがある
+
+        Form1 form;
 
         private Office.CommandBar GetCellContextMenu()
         {
@@ -48,9 +53,9 @@ namespace YAMLConvDNA
                 return;
             }
 
-            int firstCol = selectedRange.Column;
-            int firstRow = selectedRange.Row;
-            int numCols = selectedRange.Columns.Count;
+            //int firstCol = selectedRange.Column;
+            //int firstRow = selectedRange.Row;
+            //int numCols = selectedRange.Columns.Count;
             int numRows = selectedRange.Rows.Count;
 
             if (numRows < 2)
@@ -59,7 +64,6 @@ namespace YAMLConvDNA
             }
 
             var keyValuePairs = tableToKeyValuePairs(values);
-
             var properties = keyValuePairs[0].Keys;
 
             if (properties.Count == 0)
@@ -67,11 +71,11 @@ namespace YAMLConvDNA
                 return;
             }
 
-            string s = "";
-            foreach (var property in properties)
-            {
-                s += $"{property}\n"; 
-            }
+            //string s = "";
+            //foreach (var property in properties)
+            //{
+            //    s += $"{property}\n"; 
+            //}
             //MessageBox.Show($"次の列からYAMLを出力します。\n\n{s}");
 
             var serializer = new SerializerBuilder()
@@ -79,7 +83,10 @@ namespace YAMLConvDNA
                 .Build();
             var yaml = serializer.Serialize(keyValuePairs);
 
-            MessageBox.Show(yaml);
+            //MessageBox.Show(yaml);
+
+            form.SetText(yaml);
+            form.ShowDialog();
 
             //selectedRange.Worksheet.Cells[firstRow, firstCol].Value = "foo";
             //MessageBox.Show($"{firstCol}, {firstRow}, {numCols}, {numRows}");
@@ -139,11 +146,13 @@ namespace YAMLConvDNA
         void IExcelAddIn.AutoOpen()
         {
             Office.MsoControlType menuItem = Office.MsoControlType.msoControlButton;
-            Office.CommandBarButton exampleMenuItem = (Office.CommandBarButton)GetCellContextMenu().Controls.Add(menuItem, System.Reflection.Missing.Value, System.Reflection.Missing.Value, 1, true);
+            exampleMenuItem = (Office.CommandBarButton)GetCellContextMenu().Controls.Add(menuItem, System.Reflection.Missing.Value, System.Reflection.Missing.Value, 1, true);
 
             exampleMenuItem.Style = Office.MsoButtonStyle.msoButtonCaption;
-            exampleMenuItem.Caption = "copy YAML";
+            exampleMenuItem.Caption = "to YAML";
             exampleMenuItem.Click += new Microsoft.Office.Core._CommandBarButtonEvents_ClickEventHandler(exampleMenuItemClick);
+
+            form = new Form1();
         }
 
         private void ResetCellMenu()
@@ -154,6 +163,8 @@ namespace YAMLConvDNA
         void IExcelAddIn.AutoClose()
         {
             ResetCellMenu();
+
+            form.Dispose();
         }
     }
 

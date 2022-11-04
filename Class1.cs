@@ -235,6 +235,11 @@ namespace YAMLConvDNA
                         var i = Enumerable.Range(property.index, property.count);
                         var array = i.Select(x => row[x]);
 
+                        // 末尾の連続した null を削除
+                        array = array
+                            .Reverse()
+                            .SkipWhile(x => x == null)
+                            .Reverse();
                         kvp.Add(key, array);
                     }
                 }

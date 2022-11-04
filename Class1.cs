@@ -85,6 +85,8 @@ namespace YAMLConvDNA
 
             //MessageBox.Show(yaml);
 
+            Clipboard.SetText(yaml);
+
             form.SetText(yaml);
             form.ShowDialog();
 

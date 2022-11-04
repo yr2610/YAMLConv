@@ -65,7 +65,19 @@ namespace YAMLConvDNA
                 return;
             }
 
-            var keyValuePairs = tableToKeyValuePairs(values);
+            List<Dictionary<string, dynamic>> keyValuePairs;
+            try
+            {
+                keyValuePairs = tableToKeyValuePairs(values);
+            }
+            catch (Exception e)
+            {
+                MessageBox.Show(e.Message,
+                    "エラー",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+                return;
+            }
             var properties = keyValuePairs[0].Keys;
 
             if (properties.Count == 0)
@@ -188,7 +200,7 @@ namespace YAMLConvDNA
             }
         }
 
-        static List<Dictionary<string, dynamic>> tableToKeyValuePairs(object[,] valuesArray)
+        static IEnumerable<Dictionary<string, dynamic>> tableToKeyValuePairs(object[,] valuesArray)
         {
             var values = MultiDimArrayToJaggedArray(valuesArray);
 
@@ -203,7 +215,7 @@ namespace YAMLConvDNA
 
             TrimValues(ref values, ref properties);
 
-            List <Dictionary<string, dynamic>> keyValuePairs = new List<Dictionary<string, dynamic>>();
+            var keyValuePairs = new List<Dictionary<string, dynamic>>();
 
             foreach (var row in values)
             {
@@ -220,7 +232,27 @@ namespace YAMLConvDNA
                         {
                             kvp.Add(path, new Dictionary<string, dynamic>());
                         }
+                        else
+                        {
+                            var v = kvp[path];
+
+                            if (v == null || !v.GetType().IsGenericType)
+                            {
+                                var propertyName = new List<string>(pathList);
+                                propertyName.Add(key);
+                                string message = $"プロパティ名 {String.Join(".", propertyName)} ( {path} ) が重複しています。";
+                                throw new Exception(message);
+                            }
+                        }
                         kvp = kvp[path];
+                    }
+
+                    if (kvp.ContainsKey(key))
+                    {
+                        var propertyName = new List<string>(pathList);
+                        propertyName.Add(key);
+                        string message = $"プロパティ名 {String.Join(".", propertyName)} が重複しています。";
+                        throw new Exception(message);
                     }
 
                     if (property.count == 0)

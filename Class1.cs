@@ -19,6 +19,7 @@ using YamlDotNet.Serialization.NamingConventions;
 
 using Microsoft.Vbe.Interop;
 using YamlDotNet.Core;
+using YamlDotNet.Core.Tokens;
 
 namespace YAMLConvDNA
 {
@@ -94,9 +95,9 @@ namespace YAMLConvDNA
             //MessageBox.Show($"{firstCol}, {firstRow}, {numCols}, {numRows}");
         }
 
-        static List<Tuple<int, string>> getPropertiesFromHeader(object[,] values)
+        static List<(int index, int count, string[] identifier)> getPropertiesFromHeader(object[,] values)
         {
-            List<Tuple<int, string>> properties = new List<Tuple<int, string>>();
+            var properties = new List<(int index, int count, string[] identifier)>();
             int i0 = values.GetLowerBound(1);
             int row = values.GetLowerBound(0);
 
@@ -111,13 +112,48 @@ namespace YAMLConvDNA
 
                 var s = (string)v;
 
+                int length = 0;
+
+                // 配列は一旦は末尾のみ対応
+                const string arrayMark = "[]";
+
+                if (s.EndsWith(arrayMark))
+                {
+                    // 一旦仮で配列の印をつけておく
+                    length = 1;
+                    s = s.Substring(0, s.Length - arrayMark.Length);
+                }
+
+                string[] identifiers = s.Split('.');
+
                 // \w, \d は全角、日本語とかも含むようなので指定
-                if (!Regex.IsMatch(s, @"^\$?[_a-zA-Z][_a-zA-Z0-9]*(\.[_a-zA-Z][_a-zA-Z0-9]*)*(\[\])?$"))
+                if (!identifiers.All(identifier => Regex.IsMatch(identifier, @"^\$?[_a-zA-Z][_a-zA-Z0-9]*$")))
                 {
                     continue;
                 }
 
-                properties.Add(Tuple.Create(i, s));
+                properties.Add((i, length, identifiers));
+            }
+
+            for (int i = 0, n = properties.Count; i < n; i++)
+            {
+                var property = properties[i];
+
+                if (property.count == 0)
+                {
+                    continue;
+                }
+
+                if (i < n - 1)
+                {
+                    property.count = properties[i + 1].index - property.index;
+                }
+                else
+                {
+                    property.count = 1 + values.GetLength(1) - property.index;
+                }
+
+                properties[i] = property;
             }
 
             return properties;
@@ -132,12 +168,37 @@ namespace YAMLConvDNA
             for (int i = 1 + i0, n = i0 + values.GetLength(0); i < n; i++)
             {
                 Dictionary<string, dynamic> keyValuePair = new Dictionary<string, dynamic>();
-                foreach (var pair in properties)
+                foreach (var property in properties)
                 {
-                    string key = pair.Item2;
-                    var value = values[i, pair.Item1];
+                    Dictionary<string, dynamic> kvp = keyValuePair;
+                    var pathList = property.identifier.Take(property.identifier.Length - 1);
+                    string key = property.identifier.Last();
 
-                    keyValuePair.Add(key, value);
+                    foreach (var path in pathList)
+                    {
+                        if (!kvp.ContainsKey(path))
+                        {
+                            kvp.Add(path, new Dictionary<string, dynamic>());
+                        }
+                        kvp = kvp[path];
+                    }
+
+                    if (property.count == 0)
+                    {
+                        var value = values[i, property.index];
+
+                        kvp.Add(key, value);
+                    }
+                    else
+                    {
+                        List<dynamic> valueList = new List<dynamic>();
+
+                        for (int j = property.index; j < property.index + property.count; j++)
+                        {
+                            valueList.Add(values[i, j]);
+                        }
+                        kvp.Add(key, valueList.ToList());
+                    }
                 }
                 keyValuePairs.Add(keyValuePair);
             }

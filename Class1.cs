@@ -111,7 +111,8 @@ namespace YAMLConvDNA
 
                 var s = (string)v;
 
-                if (!Regex.IsMatch(s, @"^\$?[_a-zA-Z]\w*"))
+                // \w, \d は全角、日本語とかも含むようなので指定
+                if (!Regex.IsMatch(s, @"^\$?[_a-zA-Z][_a-zA-Z0-9]*(\.[_a-zA-Z][_a-zA-Z0-9]*)*(\[\])?$"))
                 {
                     continue;
                 }

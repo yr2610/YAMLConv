@@ -20,6 +20,7 @@ using YamlDotNet.Serialization.NamingConventions;
 using Microsoft.Vbe.Interop;
 using YamlDotNet.Core;
 using YamlDotNet.Core.Tokens;
+using System.Drawing.Drawing2D;
 
 namespace YAMLConvDNA
 {
@@ -95,15 +96,13 @@ namespace YAMLConvDNA
             //MessageBox.Show($"{firstCol}, {firstRow}, {numCols}, {numRows}");
         }
 
-        static List<(int index, int count, string[] identifier)> getPropertiesFromHeader(object[,] values)
+        static List<(int index, int count, string[] identifier)> getPropertiesFromHeader(List<dynamic> values)
         {
             var properties = new List<(int index, int count, string[] identifier)>();
-            int i0 = values.GetLowerBound(1);
-            int row = values.GetLowerBound(0);
 
-            for (int i = i0, n = i0 + values.GetLength(1); i < n; i++)
+            for (int i = 0, n = values.Count; i < n; i++)
             {
-                var v = values[row, i];
+                var v = values[i];
 
                 if (!(v != null && v is string))
                 {
@@ -112,7 +111,7 @@ namespace YAMLConvDNA
 
                 var s = (string)v;
 
-                int length = 0;
+                int count = 0;
 
                 // 配列は一旦は末尾のみ対応
                 const string arrayMark = "[]";
@@ -120,7 +119,7 @@ namespace YAMLConvDNA
                 if (s.EndsWith(arrayMark))
                 {
                     // 一旦仮で配列の印をつけておく
-                    length = 1;
+                    count = 1;
                     s = s.Substring(0, s.Length - arrayMark.Length);
                 }
 
@@ -132,10 +131,13 @@ namespace YAMLConvDNA
                     continue;
                 }
 
-                properties.Add((i, length, identifiers));
+                properties.Add((i, count, identifiers));
             }
 
-            for (int i = 0, n = properties.Count; i < n; i++)
+            // 番兵（末尾が配列の場合用）
+            properties.Add((values.Count, 0, null));
+
+            for (int i = 0, n = properties.Count - 1; i < n; i++)
             {
                 var property = properties[i];
 
@@ -144,28 +146,64 @@ namespace YAMLConvDNA
                     continue;
                 }
 
-                if (i < n - 1)
-                {
-                    property.count = properties[i + 1].index - property.index;
-                }
-                else
-                {
-                    property.count = 1 + values.GetLength(1) - property.index;
-                }
+                // 次のプロパティの直前まで
+                property.count = properties[i + 1].index - property.index;
 
                 properties[i] = property;
             }
 
+            // 番兵削除
+            properties.RemoveAt(properties.Count - 1);
+
             return properties;
         }
 
-        static List<Dictionary<string, dynamic>> tableToKeyValuePairs(object[,] values)
+        // List な jagged array にする
+        // ついでに末尾寄りの trim もしてしまう
+        static List<List<dynamic>> MultiDimArrayToJaggedArray(object[,] a)
         {
-            List<Dictionary<string, dynamic>> keyValuePairs = new List<Dictionary<string, dynamic>>();
-            var properties = getPropertiesFromHeader(values);
-            int i0 = values.GetLowerBound(0);
+            var i = Enumerable.Range(a.GetLowerBound(0),a.GetLength(0));
+            var j = Enumerable.Range(a.GetLowerBound(1),a.GetLength(1));
+            var list = i.Select(y => new List<dynamic>(j.Select(x => a[y, x])))
+                .TakeWhile(y => y.Any(x => x != null));
 
-            for (int i = 1 + i0, n = i0 + values.GetLength(0); i < n; i++)
+            return new List<List<dynamic>>(list);
+        }
+
+        static List<List<dynamic>> TrimValues(List<List<dynamic>> values)
+        {
+            if (values.Count() == 0)
+            {
+                return values;
+            }
+
+            // ヘッダー行（1行目）の左寄りの空欄の列は不要なので削除
+            int x0 = values.First().FindIndex(n => n != null);
+
+            if (x0 >= 1)
+            {
+                values = new List<List<dynamic>>(values.Select(row => new List<dynamic>(row.Skip(x0))));
+            }
+
+            return values;
+        }
+
+        static List<Dictionary<string, dynamic>> tableToKeyValuePairs(object[,] valuesArray)
+        {
+            var values = MultiDimArrayToJaggedArray(valuesArray);
+
+            if (values.Count() == 0)
+            {
+                return new List<Dictionary<string, dynamic>>();
+            }
+
+            var properties = getPropertiesFromHeader(values.First());
+
+            values = new List<List<dynamic>>(values.Skip(1));
+
+            List<Dictionary<string, dynamic>> keyValuePairs = new List<Dictionary<string, dynamic>>();
+
+            foreach (var row in values)
             {
                 Dictionary<string, dynamic> keyValuePair = new Dictionary<string, dynamic>();
                 foreach (var property in properties)
@@ -185,19 +223,17 @@ namespace YAMLConvDNA
 
                     if (property.count == 0)
                     {
-                        var value = values[i, property.index];
+                        var value = row[property.index];
 
                         kvp.Add(key, value);
                     }
                     else
                     {
-                        List<dynamic> valueList = new List<dynamic>();
+                        // 配列として追加
+                        var i = Enumerable.Range(property.index, property.count);
+                        var array = i.Select(x => row[x]);
 
-                        for (int j = property.index; j < property.index + property.count; j++)
-                        {
-                            valueList.Add(values[i, j]);
-                        }
-                        kvp.Add(key, valueList.ToList());
+                        kvp.Add(key, array);
                     }
                 }
                 keyValuePairs.Add(keyValuePair);

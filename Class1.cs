@@ -135,22 +135,14 @@ namespace YAMLConvDNA
                     // XXX: 一定の長さ以上の文字列が含まれてなければ、とかでも良いか
                     bool IsFlowStyle()
                     {
-                        var firstValue = values.FirstOrDefault(x => x != null);
-
-                        // 全部 null の場合も flow style
-                        if (firstValue == null)
-                        {
-                            return true;
-                        }
-
-                        var type = firstValue.GetType();
                         Type[] types = {
                             typeof(double),
                             typeof(bool),
                             typeof(char),
                         };
 
-                        return types.Any(t => t.IsAssignableFrom(type));
+                        // 全要素が null or types に代入可能なら flow style
+                        return values.All(x => x == null || types.Any(t => t.IsAssignableFrom(x.GetType())));
                     }
 
                     if (IsFlowStyle())

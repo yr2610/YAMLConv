@@ -21,6 +21,8 @@ using Microsoft.Vbe.Interop;
 using YamlDotNet.Core;
 using YamlDotNet.Core.Tokens;
 using System.Drawing.Drawing2D;
+using YamlDotNet.Core.Events;
+using YamlDotNet.Serialization.EventEmitters;
 
 namespace YAMLConvDNA
 {
@@ -93,7 +95,9 @@ namespace YAMLConvDNA
             //MessageBox.Show($"次の列からYAMLを出力します。\n\n{s}");
 
             var serializer = new SerializerBuilder()
-                .WithNamingConvention(CamelCaseNamingConvention.Instance)
+                .WithEventEmitter(next => new FlowStyleSequences(next))
+                .WithEventEmitter(next => new MultilineScalarFlowStyleEmitter(next))
+                //.WithNamingConvention(CamelCaseNamingConvention.Instance)
                 .Build();
             var yaml = serializer.Serialize(keyValuePairs);
 
@@ -106,6 +110,85 @@ namespace YAMLConvDNA
 
             //selectedRange.Worksheet.Cells[firstRow, firstCol].Value = "foo";
             //MessageBox.Show($"{firstCol}, {firstRow}, {numCols}, {numRows}");
+        }
+
+        class FlowStyleSequences : ChainedEventEmitter
+        {
+            public FlowStyleSequences(IEventEmitter nextEmitter)
+                : base(nextEmitter) { }
+
+            public override void Emit(SequenceStartEventInfo eventInfo, IEmitter emitter)
+            {
+//                if (typeof(IEnumerable<int>).IsAssignableFrom(eventInfo.Source.Type) ||
+//                    typeof(IEnumerable<double>).IsAssignableFrom(eventInfo.Source.Type))
+//                {
+//                    eventInfo = new SequenceStartEventInfo(eventInfo.Source)
+//                    {
+//                        Style = SequenceStyle.Flow
+//                    };
+//                }
+                if (typeof(IEnumerable<dynamic>).IsAssignableFrom(eventInfo.Source.Type))
+                {
+                    IEnumerable<dynamic> values = (IEnumerable<dynamic>)eventInfo.Source.Value;
+
+                    // 最初に見つかった null じゃないやつで判定
+                    // XXX: 一定の長さ以上の文字列が含まれてなければ、とかでも良いか
+                    bool IsFlowStyle()
+                    {
+                        var firstValue = values.FirstOrDefault(x => x != null);
+
+                        // 全部 null の場合も flow style
+                        if (firstValue == null)
+                        {
+                            return true;
+                        }
+
+                        var type = firstValue.GetType();
+                        Type[] types = {
+                            typeof(double),
+                            typeof(bool),
+                            typeof(char),
+                        };
+
+                        return types.Any(t => t.IsAssignableFrom(type));
+                    }
+
+                    if (IsFlowStyle())
+                    {
+                        eventInfo = new SequenceStartEventInfo(eventInfo.Source)
+                        {
+                            Style = SequenceStyle.Flow
+                        };
+                    }
+                }
+
+                nextEmitter.Emit(eventInfo, emitter);
+            }
+        }
+        public class MultilineScalarFlowStyleEmitter : ChainedEventEmitter
+        {
+            public MultilineScalarFlowStyleEmitter(IEventEmitter nextEmitter)
+                : base(nextEmitter) { }
+
+            public override void Emit(ScalarEventInfo eventInfo, IEmitter emitter)
+            {
+
+                if (typeof(string).IsAssignableFrom(eventInfo.Source.Type))
+                {
+                    string value = eventInfo.Source.Value as string;
+                    if (!string.IsNullOrEmpty(value))
+                    {
+                        bool isMultiLine = value.IndexOfAny(new char[] { '\r', '\n', '\x85', '\x2028', '\x2029' }) >= 0;
+                        if (isMultiLine)
+                            eventInfo = new ScalarEventInfo(eventInfo.Source)
+                            {
+                                Style = ScalarStyle.Literal
+                            };
+                    }
+                }
+
+                nextEmitter.Emit(eventInfo, emitter);
+            }
         }
 
         static IEnumerable<(int index, int count, string[] identifier)> getPropertiesFromHeader(IEnumerable<dynamic> values)
@@ -178,7 +261,9 @@ namespace YAMLConvDNA
             var j = Enumerable.Range(a.GetLowerBound(1),a.GetLength(1));
             var list = i.Select(y => new List<dynamic>(j.Select(x => a[y, x])))
                 .SkipWhile(y => y.All(x => x == null))
-                .TakeWhile(y => y.Any(x => x != null));
+                .Reverse()
+                .SkipWhile(y => y.All(x => x == null))
+                .Reverse();
 
             return new List<List<dynamic>>(list);
         }

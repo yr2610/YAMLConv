@@ -50,19 +50,21 @@ namespace YAMLConvDNA
             }
 
             var selectedRange = (Range)selection;
-            var values = selectedRange.Value;
+            var cellValues = selectedRange.Value;
 
-            if (values == null || !values.GetType().IsArray)
+            if (cellValues == null || !cellValues.GetType().IsArray)
             {
                 return;
             }
 
+            var values = MultiDimArrayToJaggedArray(cellValues);
+
             //int firstCol = selectedRange.Column;
             //int firstRow = selectedRange.Row;
             //int numCols = selectedRange.Columns.Count;
-            int numRows = selectedRange.Rows.Count;
+            //int numRows = selectedRange.Rows.Count;
 
-            if (numRows < 2)
+            if (values.Count < 2)
             {
                 return;
             }
@@ -262,11 +264,6 @@ namespace YAMLConvDNA
 
         static void TrimValues(ref IEnumerable<List<dynamic>> values, ref IEnumerable<(int index, int count, string[] identifier)> properties)
         {
-            if (values.Count() == 0)
-            {
-                return;
-            }
-
             // ヘッダー行（1行目）の左寄りの空欄の列は不要なので削除
             int x0 = values.First().FindIndex(n => n != null);
 
@@ -277,15 +274,8 @@ namespace YAMLConvDNA
             }
         }
 
-        static IEnumerable<Dictionary<string, dynamic>> tableToKeyValuePairs(object[,] valuesArray)
+        static IEnumerable<Dictionary<string, dynamic>> tableToKeyValuePairs(IEnumerable<List<dynamic>> values)
         {
-            var values = MultiDimArrayToJaggedArray(valuesArray);
-
-            if (values.Count() == 0)
-            {
-                return new List<Dictionary<string, dynamic>>();
-            }
-
             var properties = getPropertiesFromHeader(values.First());
 
             values = new List<List<dynamic>>(values.Skip(1));

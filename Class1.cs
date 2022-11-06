@@ -274,11 +274,110 @@ namespace YAMLConvDNA
             }
         }
 
+        static void SetId(ref IEnumerable<List<dynamic>> values, IEnumerable<(int index, int count, string[] identifier)> properties)
+        {
+            const string idIdentifier = "$id";
+            var idProperty = properties.FirstOrDefault(property => property.identifier.Length == 1 && property.identifier[0] == idIdentifier);
+
+            // $id がなかったら何もしない
+            if (idProperty.identifier == null)
+            {
+                return;
+            }
+
+            int idIndex = idProperty.index;
+
+            // $id 以外で先頭のプロパティを基にhash値を求める
+            var baseProperty = properties.FirstOrDefault(property => String.Join(".", property.identifier) != idIdentifier);
+
+            // $id しかない…？
+            if (baseProperty.identifier == null)
+            {
+                return;
+            }
+
+            // 入力済みの $id に重複がないか確認
+            var duplicates0 = values
+                .GroupBy(x => x[idIndex])
+                .Where(x => x.Key != null && x.Count() > 1)
+                .Select(x => x.Key)
+                .ToList();
+
+            if (duplicates0.Count() > 0)
+            {
+                throw new Exception("$id が重複しています");
+            }
+
+            // 配列だとしてもそのまま利用
+            int baseIndex = baseProperty.index;
+
+            List<(List<dynamic> row, string hash, int index)> idTarget = new List<(List<dynamic> row, string hash, int index)>();
+
+            foreach (var row in values)
+            {
+                // 空欄の場合のみ付与
+                if (row[idIndex] != null)
+                {
+                    continue;
+                }
+
+                var baseIdentifier = row[baseIndex];
+
+                // null の行は id 付与しない
+                if (baseIdentifier == null)
+                {
+                    continue;
+                }
+
+                var hash = GetHash(baseIdentifier.ToString());
+
+                const int idLength = 4;
+
+                row[idIndex] = hash.Substring(0, idLength);
+
+                idTarget.Add((row: row, hash: hash, index: 0));
+            }
+
+            // TODO: 重複しなくなるまで hash.Substring の先頭をずらして取得し直す
+            // TODO: 最後まで行っても重複したら例外（「重複を解決できません」）でOK
+            // XXX: 一旦重複してたら例外投げとく
+            var duplicates = values
+                .GroupBy(x => x[idIndex])
+                .Where(x => x.Key != null && x.Count() > 1)
+                .Select(x => x.Key)
+                .ToList();
+
+            if (duplicates.Count() > 0)
+            {
+                throw new Exception($"生成した $id の重複を解決できません\n\n{duplicates[0]}");
+            }
+        }
+
+        static string GetHash(string s)
+        {
+            byte[] data = Encoding.UTF8.GetBytes(s);
+            System.Security.Cryptography.MD5CryptoServiceProvider md5 =
+                new System.Security.Cryptography.MD5CryptoServiceProvider();
+            byte[] bs = md5.ComputeHash(data);
+
+            // リソースを解放する
+            md5.Clear();
+
+            string base64 = Convert.ToBase64String(bs);
+
+            // 用途は unique id なのでシンボルに使えない文字を削除
+            s = "+/=".ToCharArray().Aggregate(base64, (_s, c) => _s.Replace(c.ToString(), ""));
+
+            return s;
+        }
+
         static IEnumerable<Dictionary<string, dynamic>> tableToKeyValuePairs(IEnumerable<List<dynamic>> values)
         {
             var properties = getPropertiesFromHeader(values.First());
 
             values = new List<List<dynamic>>(values.Skip(1));
+
+            SetId(ref values, properties);
 
             TrimValues(ref values, ref properties);
 

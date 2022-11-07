@@ -23,6 +23,7 @@ using YamlDotNet.Core.Tokens;
 using System.Drawing.Drawing2D;
 using YamlDotNet.Core.Events;
 using YamlDotNet.Serialization.EventEmitters;
+using System.IO;
 
 namespace YAMLConvDNA
 {
@@ -274,24 +275,33 @@ namespace YAMLConvDNA
             }
         }
 
-        static void SetId(ref IEnumerable<List<dynamic>> values, IEnumerable<(int index, int count, string[] identifier)> properties)
+        // base 列が null の行を削除
+        static void DeleteEmptyRow(ref IEnumerable<List<dynamic>> values, (int index, int count, string[] identifier) baseProperty)
         {
-            const string idIdentifier = "$id";
+            values = values.Where(x => x[baseProperty.index] != null);
+        }
+
+        const string idIdentifier = "$id";
+
+        static int GetIdPropertyIndex(IEnumerable<(int index, int count, string[] identifier)> properties)
+        {
             var idProperty = properties.FirstOrDefault(property => property.identifier.Length == 1 && property.identifier[0] == idIdentifier);
 
+            return (idProperty.identifier == null) ? -1 : idProperty.index;
+        }
+
+        // $id 以外の先頭のプロパティ
+        static (int index, int count, string[] identifier) GetBaseProperty(IEnumerable<(int index, int count, string[] identifier)> properties)
+        {
+            return properties.FirstOrDefault(property => String.Join(".", property.identifier) != idIdentifier);
+        }
+
+        static void SetId(ref IEnumerable<List<dynamic>> values, IEnumerable<(int index, int count, string[] identifier)> properties, (int index, int count, string[] identifier) baseProperty)
+        {
+            int idIndex = GetIdPropertyIndex(properties);
+
             // $id がなかったら何もしない
-            if (idProperty.identifier == null)
-            {
-                return;
-            }
-
-            int idIndex = idProperty.index;
-
-            // $id 以外で先頭のプロパティを基にhash値を求める
-            var baseProperty = properties.FirstOrDefault(property => String.Join(".", property.identifier) != idIdentifier);
-
-            // $id しかない…？
-            if (baseProperty.identifier == null)
+            if (idIndex == -1)
             {
                 return;
             }
@@ -356,12 +366,11 @@ namespace YAMLConvDNA
         static string GetHash(string s)
         {
             byte[] data = Encoding.UTF8.GetBytes(s);
-            System.Security.Cryptography.MD5CryptoServiceProvider md5 =
-                new System.Security.Cryptography.MD5CryptoServiceProvider();
-            byte[] bs = md5.ComputeHash(data);
+            var sha256 = new System.Security.Cryptography.SHA256CryptoServiceProvider();
+            byte[] bs = sha256.ComputeHash(data);
 
             // リソースを解放する
-            md5.Clear();
+            sha256.Clear();
 
             string base64 = Convert.ToBase64String(bs);
 
@@ -375,9 +384,33 @@ namespace YAMLConvDNA
         {
             var properties = getPropertiesFromHeader(values.First());
 
+            // $id 以外で先頭のプロパティを基にhash値を求める
+            var baseProperty = GetBaseProperty(properties);
+
+            // $id しかない…？
+            if (baseProperty.identifier == null)
+            {
+                string message = "Baseとなるプロパティがありません。";
+                throw new Exception(message);
+            }
+
             values = new List<List<dynamic>>(values.Skip(1));
 
-            SetId(ref values, properties);
+            DeleteEmptyRow(ref values, baseProperty);
+
+            // base値に重複がないか確認
+            var baseDuplicates = values
+                .GroupBy(x => x[baseProperty.index])
+                .Where(x => x.Count() > 1)
+                .Select(x => x.Key)
+                .ToList();
+
+            if (baseDuplicates.Count() > 0)
+            {
+                throw new Exception($"Base値({String.Join(", ", baseDuplicates)})が重複しています");
+            }
+
+            SetId(ref values, properties, baseProperty);
 
             TrimValues(ref values, ref properties);
 

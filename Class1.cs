@@ -186,9 +186,18 @@ namespace YAMLConvDNA
             }
         }
 
-        static IEnumerable<(int index, int count, string[] identifier)> getPropertiesFromHeader(IEnumerable<dynamic> values)
+        const string idIdentifier = "$id";
+        const string basePropertyMark = "*";
+
+        static IEnumerable<(int index, int count, string[] identifier)> getPropertiesFromHeader(IEnumerable<dynamic> values, out int idIndex, out int baseIndex)
         {
+            int? _baseIndex = null;
             var properties = new List<(int index, int count, string[] identifier)>();
+
+            idIndex = -1;
+
+            // $id 以外の最初のプロパティ
+            int? firstPropertyIndex = null;
 
             for (int i = 0, n = values.Count(); i < n; i++)
             {
@@ -203,6 +212,13 @@ namespace YAMLConvDNA
 
                 int count = 0;
 
+                if (s == idIdentifier)
+                {
+                    idIndex = i;
+                    properties.Add((i, count, new string[] { s }));
+                    continue;
+                }
+
                 // 配列は一旦は末尾のみ対応
                 const string arrayMark = "[]";
 
@@ -213,16 +229,39 @@ namespace YAMLConvDNA
                     s = s.Substring(0, s.Length - arrayMark.Length);
                 }
 
+                bool marked = s.StartsWith(basePropertyMark);
+
+                if (marked)
+                {
+                    // マーク削除
+                    s = s.Substring(1);
+                }
+
                 string[] identifiers = s.Split('.');
 
                 // \w, \d は全角、日本語とかも含むようなので指定
-                if (!identifiers.All(identifier => Regex.IsMatch(identifier, @"^\$?[_a-zA-Z][_a-zA-Z0-9]*$")))
+                if (!identifiers.All(identifier => Regex.IsMatch(identifier, @"^[_a-zA-Z][_a-zA-Z0-9]*$")))
                 {
                     continue;
                 }
 
+                if (_baseIndex == null)
+                {
+                    if (marked)
+                    {
+                        _baseIndex = i;
+                    }
+                    else if (firstPropertyIndex == null)
+                    {
+                        firstPropertyIndex = i;
+                    }
+                }
+
                 properties.Add((i, count, identifiers));
             }
+
+            // base mark がない場合は先頭
+            baseIndex = _baseIndex ?? firstPropertyIndex.Value;
 
             // 番兵（末尾が配列の場合用）
             properties.Add((values.Count(), 0, null));
@@ -263,49 +302,44 @@ namespace YAMLConvDNA
             return new List<List<dynamic>>(list);
         }
 
-        static void TrimValues(ref IEnumerable<List<dynamic>> values, ref IEnumerable<(int index, int count, string[] identifier)> properties)
-        {
-            // ヘッダー行（1行目）の左寄りの空欄の列は不要なので削除
-            int x0 = values.First().FindIndex(n => n != null);
-
-            if (x0 >= 1)
-            {
-                values = new List<List<dynamic>>(values.Select(row => new List<dynamic>(row.Skip(x0))));
-                properties = properties.Select(property => (property.index - x0, property.count, property.identifier));
-            }
-        }
+        //static void TrimValues(ref IEnumerable<List<dynamic>> values, ref IEnumerable<(int index, int count, string[] identifier)> properties)
+        //{
+        //    // ヘッダー行（1行目）の左寄りの空欄の列は不要なので削除
+        //    int x0 = values.First().FindIndex(n => n != null);
+        //
+        //    if (x0 >= 1)
+        //    {
+        //        values = new List<List<dynamic>>(values.Select(row => new List<dynamic>(row.Skip(x0))));
+        //        properties = properties.Select(property => (property.index - x0, property.count, property.identifier));
+        //    }
+        //}
 
         // base 列が null の行を削除
-        static void DeleteEmptyRow(ref IEnumerable<List<dynamic>> values, (int index, int count, string[] identifier) baseProperty)
+        static void DeleteEmptyRow(ref IEnumerable<List<dynamic>> values, int baseIndex)
         {
-            values = values.Where(x => x[baseProperty.index] != null);
+            values = values.Where(x => x[baseIndex] != null);
         }
 
-        const string idIdentifier = "$id";
-
-        static int GetIdPropertyIndex(IEnumerable<(int index, int count, string[] identifier)> properties)
-        {
-            var idProperty = properties.FirstOrDefault(property => property.identifier.Length == 1 && property.identifier[0] == idIdentifier);
-
-            return (idProperty.identifier == null) ? -1 : idProperty.index;
-        }
+        //static int GetIdPropertyIndex(IEnumerable<(int index, int count, string[] identifier)> properties)
+        //{
+        //    var idProperty = properties.FirstOrDefault(property => property.identifier.Length == 1 && property.identifier[0] == idIdentifier);
+        //
+        //    return (idProperty.identifier == null) ? -1 : idProperty.index;
+        //}
 
         // $id 以外の先頭のプロパティ
-        static (int index, int count, string[] identifier) GetBaseProperty(IEnumerable<(int index, int count, string[] identifier)> properties)
+        //static (int index, int count, string[] identifier) GetBaseProperty(IEnumerable<(int index, int count, string[] identifier)> properties)
+        //{
+        //    var marked = properties.FirstOrDefault(property => property.identifier.First().StartsWith(basePropertyMark));
+        //    if (marked.identifier != null)
+        //    {
+        //        return marked;
+        //    }
+        //    return properties.FirstOrDefault(property => String.Join(".", property.identifier) != idIdentifier);
+        //}
+
+        static void SetId(ref IEnumerable<List<dynamic>> values, IEnumerable<(int index, int count, string[] identifier)> properties, int baseIndex, int idIndex)
         {
-            return properties.FirstOrDefault(property => String.Join(".", property.identifier) != idIdentifier);
-        }
-
-        static void SetId(ref IEnumerable<List<dynamic>> values, IEnumerable<(int index, int count, string[] identifier)> properties, (int index, int count, string[] identifier) baseProperty)
-        {
-            int idIndex = GetIdPropertyIndex(properties);
-
-            // $id がなかったら何もしない
-            if (idIndex == -1)
-            {
-                return;
-            }
-
             // 入力済みの $id に重複がないか確認
             var duplicates0 = values
                 .GroupBy(x => x[idIndex])
@@ -319,7 +353,6 @@ namespace YAMLConvDNA
             }
 
             // 配列だとしてもそのまま利用
-            int baseIndex = baseProperty.index;
 
             List<(List<dynamic> row, string hash, int index)> idTarget = new List<(List<dynamic> row, string hash, int index)>();
 
@@ -380,27 +413,46 @@ namespace YAMLConvDNA
             return s;
         }
 
+        // $id 列がなければ最終列に追加
+        static void AddIdColumn(ref IEnumerable<List<dynamic>> values)
+        {
+            if (values.First().Contains(idIdentifier))
+            {
+                return;
+            }
+
+            values.First().Add(idIdentifier);
+            foreach (dynamic row in values.Skip(1))
+            {
+                row.Add(null);
+            }
+        }
+
         static IEnumerable<Dictionary<string, dynamic>> tableToKeyValuePairs(IEnumerable<List<dynamic>> values)
         {
-            var properties = getPropertiesFromHeader(values.First());
+            AddIdColumn(ref values);
+
+            int idIndex;
+            int baseIndex;
+            var properties = getPropertiesFromHeader(values.First(), out idIndex, out baseIndex);
 
             // $id 以外で先頭のプロパティを基にhash値を求める
-            var baseProperty = GetBaseProperty(properties);
+            //var baseProperty = properties.ElementAt(baseIndex);
 
             // $id しかない…？
-            if (baseProperty.identifier == null)
-            {
-                string message = "Baseとなるプロパティがありません。";
-                throw new Exception(message);
-            }
+            //if (baseProperty.identifier == null)
+            //{
+            //    string message = "Baseとなるプロパティがありません。";
+            //    throw new Exception(message);
+            //}
 
             values = new List<List<dynamic>>(values.Skip(1));
 
-            DeleteEmptyRow(ref values, baseProperty);
+            DeleteEmptyRow(ref values, baseIndex);
 
             // base値に重複がないか確認
             var baseDuplicates = values
-                .GroupBy(x => x[baseProperty.index])
+                .GroupBy(x => x[baseIndex])
                 .Where(x => x.Count() > 1)
                 .Select(x => x.Key)
                 .ToList();
@@ -410,9 +462,9 @@ namespace YAMLConvDNA
                 throw new Exception($"Base値({String.Join(", ", baseDuplicates)})が重複しています");
             }
 
-            SetId(ref values, properties, baseProperty);
+            SetId(ref values, properties, baseIndex, idIndex);
 
-            TrimValues(ref values, ref properties);
+            //TrimValues(ref values, ref properties);
 
             var keyValuePairs = new List<Dictionary<string, dynamic>>();
 

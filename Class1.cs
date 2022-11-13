@@ -347,9 +347,10 @@ namespace YAMLConvDNA
                 .Select(x => x.Key)
                 .ToList();
 
-            if (duplicates0.Count() > 0)
+            if (duplicates0.Any())
             {
-                throw new Exception("$id が重複しています");
+                var idList = string.Join("\n", duplicates0.Select(x => $"* {x}"));
+                throw new Exception($"$id が重複しています\n{idList}");
             }
 
             // 配列だとしてもそのまま利用
@@ -374,7 +375,7 @@ namespace YAMLConvDNA
 
                 var hash = GetHash(baseIdentifier.ToString());
 
-                const int idLength = 4;
+                const int idLength = 6;
 
                 row[idIndex] = hash.Substring(0, idLength);
 
@@ -386,13 +387,21 @@ namespace YAMLConvDNA
             // XXX: 一旦重複してたら例外投げとく
             var duplicates = values
                 .GroupBy(x => x[idIndex])
-                .Where(x => x.Key != null && x.Count() > 1)
-                .Select(x => x.Key)
-                .ToList();
+                .Where(x => x.Key != null && x.Count() > 1);
+                //.Select(x => x.Key)
+                //.ToList();
 
-            if (duplicates.Count() > 0)
+            if (duplicates.Any())
             {
-                throw new Exception($"生成した $id の重複を解決できません\n\n{duplicates[0]}");
+                string s = "";
+                foreach (var dup in duplicates)
+                {
+                    const string indentString = "  ";
+                    s += $"{dup.Key.ToString()}:\n";
+                    var baseProperties = string.Join("\n", dup.Select(x => $"{indentString}- {(string)x[baseIndex]}"));
+                    s += $"{baseProperties}\n";
+                }
+                throw new Exception($"生成した $id の重複を解決できません\n{s}");
             }
         }
 

@@ -195,6 +195,7 @@ namespace YAMLConvDNA
             var properties = new List<(int index, int count, string[] identifier)>();
 
             idIndex = -1;
+            baseIndex = -1;
 
             // $id 以外の最初のプロパティ
             int? firstPropertyIndex = null;
@@ -258,6 +259,11 @@ namespace YAMLConvDNA
                 }
 
                 properties.Add((i, count, identifiers));
+            }
+
+            if (firstPropertyIndex == null)
+            {
+                return properties;
             }
 
             // base mark がない場合は先頭
@@ -444,6 +450,11 @@ namespace YAMLConvDNA
             int idIndex;
             int baseIndex;
             var properties = getPropertiesFromHeader(values.First(), out idIndex, out baseIndex);
+
+            if (baseIndex == -1)
+            {
+                throw new Exception($"ヘッダー行に有効なプロパティがありません。");
+            }
 
             // $id 以外で先頭のプロパティを基にhash値を求める
             //var baseProperty = properties.ElementAt(baseIndex);

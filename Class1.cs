@@ -246,16 +246,16 @@ namespace YAMLConvDNA
                     continue;
                 }
 
-                if (_baseIndex == null)
+                if (marked)
                 {
-                    if (marked)
+                    if (_baseIndex == null)
                     {
                         _baseIndex = i;
                     }
-                    else if (firstPropertyIndex == null)
-                    {
-                        firstPropertyIndex = i;
-                    }
+                }
+                else if (firstPropertyIndex == null)
+                {
+                    firstPropertyIndex = i;
                 }
 
                 properties.Add((i, count, identifiers));

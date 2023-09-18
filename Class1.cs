@@ -24,6 +24,9 @@ using System.Drawing.Drawing2D;
 using YamlDotNet.Core.Events;
 using YamlDotNet.Serialization.EventEmitters;
 using System.IO;
+using CsvHelper;
+using System.Globalization;
+using CsvHelper.Configuration;
 
 namespace YAMLConvDNA
 {
@@ -40,6 +43,33 @@ namespace YAMLConvDNA
         {
             return this.xlApp.CommandBars["Cell"];
         }
+
+        static string JaggedArrayToTsv(IEnumerable<List<dynamic>> array2d)
+        {
+            StringBuilder sb = new StringBuilder();
+            StringWriter sw = new StringWriter(sb);
+            var config = new CsvConfiguration(CultureInfo.InvariantCulture) { Delimiter = "\t" };
+
+            using (var csv = new CsvWriter(sw, config))
+            {
+                foreach (var value in array2d)
+                {
+                    foreach (var item in value)
+                    {
+                        csv.WriteField(item);
+                    }
+                    csv.NextRecord();
+                }
+            }
+
+            return sw.ToString();
+        }
+        static string tsvToYamlComment(string tsv)
+        {
+            // SkipLast が使えないので reverse, skip, reverse する
+            return string.Join("\n", tsv.Split('\n').Reverse().Skip(1).Reverse().Select(x => "# " + x));
+        }
+
 
         void exampleMenuItemClick(Microsoft.Office.Core.CommandBarButton Ctrl, ref bool CancelDefault)
         {
@@ -59,6 +89,9 @@ namespace YAMLConvDNA
             }
 
             var values = MultiDimArrayToJaggedArray(cellValues);
+
+            string tsv = JaggedArrayToTsv(values);
+            string yamlCommentTsv = tsvToYamlComment(tsv);
 
             //int firstCol = selectedRange.Column;
             //int firstRow = selectedRange.Row;
@@ -106,9 +139,9 @@ namespace YAMLConvDNA
 
             //MessageBox.Show(yaml);
 
-            Clipboard.SetText(yaml);
+            Clipboard.SetText(yamlCommentTsv + "\n" + yaml);
 
-            form.SetText(yaml);
+            form.SetText(yamlCommentTsv + "\n" + yaml);
             form.ShowDialog();
 
             //selectedRange.Worksheet.Cells[firstRow, firstCol].Value = "foo";

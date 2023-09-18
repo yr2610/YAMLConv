@@ -22,9 +22,17 @@ namespace YAMLConvDNA
             textBox1.Text = s;
         }
 
+        public delegate void Event(object sender, EventArgs e);
+        public Event TsvCommentCheckBox_CheckedChanged { get; set; }
+
         private void button1_Click(object sender, EventArgs e)
         {
             Clipboard.SetText(textBox1.Text);
+        }
+
+        private void checkBox2_CheckedChanged(object sender, EventArgs e)
+        {
+            TsvCommentCheckBox_CheckedChanged(sender, e);
         }
     }
 }

@@ -70,6 +70,24 @@ namespace YAMLConvDNA
             return string.Join("\n", tsv.Split('\n').Reverse().Skip(1).Reverse().Select(x => "# " + x));
         }
 
+        string Yaml { get; set; }
+        string TsvComment { get; set; }
+
+        private void TsvCommentCheckBox_CheckedChanged(object sender, EventArgs e)
+        {
+            var checkBox = (System.Windows.Forms.CheckBox)sender;
+
+            string s = "";
+
+            if (checkBox.Checked)
+            {
+                s += TsvComment + "\n";
+            }
+            s += Yaml;
+
+            Clipboard.SetText(s);
+            form.SetText(s);
+        }
 
         void exampleMenuItemClick(Microsoft.Office.Core.CommandBarButton Ctrl, ref bool CancelDefault)
         {
@@ -91,7 +109,7 @@ namespace YAMLConvDNA
             var values = MultiDimArrayToJaggedArray(cellValues);
 
             string tsv = JaggedArrayToTsv(values);
-            string yamlCommentTsv = tsvToYamlComment(tsv);
+            TsvComment = tsvToYamlComment(tsv);
 
             //int firstCol = selectedRange.Column;
             //int firstRow = selectedRange.Row;
@@ -135,13 +153,13 @@ namespace YAMLConvDNA
                 .WithEventEmitter(next => new MultilineScalarFlowStyleEmitter(next))
                 //.WithNamingConvention(CamelCaseNamingConvention.Instance)
                 .Build();
-            var yaml = serializer.Serialize(keyValuePairs);
+            Yaml = serializer.Serialize(keyValuePairs);
 
             //MessageBox.Show(yaml);
 
-            Clipboard.SetText(yamlCommentTsv + "\n" + yaml);
-
-            form.SetText(yamlCommentTsv + "\n" + yaml);
+            string s = TsvComment + "\n" + Yaml;
+            Clipboard.SetText(s);
+            form.SetText(s);
             form.ShowDialog();
 
             //selectedRange.Worksheet.Cells[firstRow, firstCol].Value = "foo";
@@ -585,7 +603,6 @@ namespace YAMLConvDNA
             return keyValuePairs;
         }
 
-
         void IExcelAddIn.AutoOpen()
         {
             Office.MsoControlType menuItem = Office.MsoControlType.msoControlButton;
@@ -596,6 +613,7 @@ namespace YAMLConvDNA
             exampleMenuItem.Click += new Microsoft.Office.Core._CommandBarButtonEvents_ClickEventHandler(exampleMenuItemClick);
 
             form = new Form1();
+            form.TsvCommentCheckBox_CheckedChanged += TsvCommentCheckBox_CheckedChanged;
         }
 
         private void ResetCellMenu()

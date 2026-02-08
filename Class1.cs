@@ -240,30 +240,30 @@ namespace YAMLConvDNA
         const string idIdentifier = "$id";
         const string basePropertyMark = "*";
 
-        static IEnumerable<(int index, int count, string[] identifier)> getPropertiesFromHeader(IEnumerable<dynamic> values, out int idIndex, out int baseIndex)
+        static IEnumerable<(int index, int count, string[] identifier)> getPropertiesFromHeader(
+            IEnumerable<dynamic> values,
+            out int idIndex,
+            out List<int> baseIndices
+        )
         {
-            int? _baseIndex = null;
+            var _baseIndices = new List<int>();
             var properties = new List<(int index, int count, string[] identifier)>();
 
             idIndex = -1;
-            baseIndex = -1;
+            baseIndices = _baseIndices;
 
-            // $id 以外の最初のプロパティ
+            // $id 以外の最初の有効プロパティ
             int? firstPropertyIndex = null;
 
             for (int i = 0, n = values.Count(); i < n; i++)
             {
                 var v = values.ElementAt(i);
-
-                if (!(v != null && v is string))
-                {
-                    continue;
-                }
+                if (!(v != null && v is string)) continue;
 
                 var s = (string)v;
-
                 int count = 0;
 
+                // $id は専用列
                 if (s == idIdentifier)
                 {
                     idIndex = i;
@@ -271,27 +271,20 @@ namespace YAMLConvDNA
                     continue;
                 }
 
-                // 配列は一旦は末尾のみ対応
+                // 配列列（[] 印）
                 const string arrayMark = "[]";
-
                 if (s.EndsWith(arrayMark))
                 {
-                    // 一旦仮で配列の印をつけておく
                     count = 1;
                     s = s.Substring(0, s.Length - arrayMark.Length);
                 }
 
+                // * は base 指定（複数可）
                 bool marked = s.StartsWith(basePropertyMark);
+                if (marked) s = s.Substring(1);
 
-                if (marked)
-                {
-                    // マーク削除
-                    s = s.Substring(1);
-                }
-
+                // a.b.c 形式（ASCII 規則は既存どおり）
                 string[] identifiers = s.Split('.');
-
-                // \w, \d は全角、日本語とかも含むようなので指定
                 if (!identifiers.All(identifier => Regex.IsMatch(identifier, @"^[_a-zA-Z][_a-zA-Z0-9]*$")))
                 {
                     continue;
@@ -299,10 +292,7 @@ namespace YAMLConvDNA
 
                 if (marked)
                 {
-                    if (_baseIndex == null)
-                    {
-                        _baseIndex = i;
-                    }
+                    _baseIndices.Add(i); // ★ 複数収集
                 }
                 else if (firstPropertyIndex == null)
                 {
@@ -317,28 +307,21 @@ namespace YAMLConvDNA
                 return properties;
             }
 
-            // base mark がない場合は先頭
-            baseIndex = _baseIndex ?? firstPropertyIndex.Value;
+            // * が一つも無ければ、従来通り「最初の有効ヘッダー」を base に採用
+            if (_baseIndices.Count == 0)
+            {
+                _baseIndices.Add(firstPropertyIndex.Value);
+            }
 
-            // 番兵（末尾が配列の場合用）
+            // 配列幅の確定（番兵を使う既存ロジック）
             properties.Add((values.Count(), 0, null));
-
             for (int i = 0, n = properties.Count - 1; i < n; i++)
             {
                 var property = properties[i];
-
-                if (property.count == 0)
-                {
-                    continue;
-                }
-
-                // 次のプロパティの直前まで
+                if (property.count == 0) continue;
                 property.count = properties[i + 1].index - property.index;
-
                 properties[i] = property;
             }
-
-            // 番兵削除
             properties.RemoveAt(properties.Count - 1);
 
             return properties;
@@ -372,9 +355,9 @@ namespace YAMLConvDNA
         //}
 
         // base 列が null の行を削除
-        static void DeleteEmptyRow(ref IEnumerable<List<dynamic>> values, int baseIndex)
+        static void DeleteEmptyRow(ref IEnumerable<List<dynamic>> values, List<int> baseIndices)
         {
-            values = values.Where(x => x[baseIndex] != null);
+            values = values.Where(x => BuildBaseKey(x, baseIndices) != null);
         }
 
         //static int GetIdPropertyIndex(IEnumerable<(int index, int count, string[] identifier)> properties)
@@ -395,9 +378,14 @@ namespace YAMLConvDNA
         //    return properties.FirstOrDefault(property => String.Join(".", property.identifier) != idIdentifier);
         //}
 
-        static void SetId(ref IEnumerable<List<dynamic>> values, IEnumerable<(int index, int count, string[] identifier)> properties, int baseIndex, int idIndex)
+        static void SetId(
+            ref IEnumerable<List<dynamic>> values,
+            IEnumerable<(int index, int count, string[] identifier)> properties,
+            List<int> baseIndices,
+            int idIndex
+        )
         {
-            // 入力済みの $id に重複がないか確認
+            // 既存 $id の重複チェック（従来どおり）
             var duplicates0 = values
                 .GroupBy(x => x[idIndex])
                 .Where(x => x.Key != null && x.Count() > 1)
@@ -410,53 +398,36 @@ namespace YAMLConvDNA
                 throw new Exception($"$id が重複しています\n{idList}");
             }
 
-            // 配列だとしてもそのまま利用
-
-            List<(List<dynamic> row, string hash, int index)> idTarget = new List<(List<dynamic> row, string hash, int index)>();
-
+            // $id 未設定の行のみ、合成キーからハッシュ採番
             foreach (var row in values)
             {
-                // 空欄の場合のみ付与
-                if (row[idIndex] != null)
-                {
-                    continue;
-                }
+                if (row[idIndex] != null) continue;
 
-                var baseIdentifier = row[baseIndex];
+                var key = BuildBaseKey(row, baseIndices);
+                if (key == null) continue; // 空行相当スキップ
 
-                // null の行は id 付与しない
-                if (baseIdentifier == null)
-                {
-                    continue;
-                }
-
-                var hash = GetHash(baseIdentifier.ToString());
-
+                var hash = GetHash(key);
                 const int idLength = 6;
-
                 row[idIndex] = hash.Substring(0, idLength);
-
-                idTarget.Add((row: row, hash: hash, index: 0));
             }
 
-            // TODO: 重複しなくなるまで hash.Substring の先頭をずらして取得し直す
-            // TODO: 最後まで行っても重複したら例外（「重複を解決できません」）でOK
-            // XXX: 一旦重複してたら例外投げとく
+            // 生成後 $id の重複チェック（可視キーでレポート）
             var duplicates = values
                 .GroupBy(x => x[idIndex])
                 .Where(x => x.Key != null && x.Count() > 1);
-                //.Select(x => x.Key)
-                //.ToList();
 
             if (duplicates.Any())
             {
                 string s = "";
+                const string indentString = " ";
                 foreach (var dup in duplicates)
                 {
-                    const string indentString = "  ";
                     s += $"{dup.Key.ToString()}:\n";
-                    var baseProperties = string.Join("\n", dup.Select(x => $"{indentString}- {(string)x[baseIndex]}"));
-                    s += $"{baseProperties}\n";
+                    var keys = string.Join(
+                        "\n",
+                        dup.Select(x => $"{indentString}- {BuildBaseKeyDisplay(x, baseIndices)}")
+                    );
+                    s += $"{keys}\n";
                 }
                 throw new Exception($"生成した $id の重複を解決できません\n{s}");
             }
@@ -479,6 +450,36 @@ namespace YAMLConvDNA
             return s;
         }
 
+        // 合成キー（長さプレフィックス方式）
+        static string BuildBaseKey(List<dynamic> row, IReadOnlyList<int> baseIndices)
+        {
+            if (baseIndices == null || baseIndices.Count == 0) return null;
+
+            // 値を順に取得（null は空文字に）
+            var parts = baseIndices.Select(i => row[i]?.ToString() ?? string.Empty).ToList();
+
+            // 全部が空ならキーなし
+            if (parts.All(p => p.Length == 0)) return null;
+
+            // "<len>:<value>" を連結
+            var sb = new StringBuilder();
+            foreach (var p in parts)
+            {
+                sb.Append(p.Length);
+                sb.Append(':');
+                sb.Append(p);
+            }
+            return sb.ToString();
+        }
+
+        // 表示用（ログ／エラーメッセージ用）の可視キー
+        static string BuildBaseKeyDisplay(List<dynamic> row, IReadOnlyList<int> baseIndices)
+        {
+            if (baseIndices == null || baseIndices.Count == 0) return string.Empty;
+            var parts = baseIndices.Select(i => row[i]?.ToString() ?? string.Empty);
+            return string.Join(" | ", parts);
+        }
+
         // $id 列がなければ最終列に追加
         static void AddIdColumn(ref IEnumerable<List<dynamic>> values)
         {
@@ -499,10 +500,11 @@ namespace YAMLConvDNA
             AddIdColumn(ref values);
 
             int idIndex;
-            int baseIndex;
-            var properties = getPropertiesFromHeader(values.First(), out idIndex, out baseIndex);
+            List<int> baseIndices;
 
-            if (baseIndex == -1)
+            var properties = getPropertiesFromHeader(values.First(), out idIndex, out baseIndices);
+
+            if (baseIndices == null || baseIndices.Count == 0)
             {
                 throw new Exception($"ヘッダー行に有効なプロパティがありません。");
             }
@@ -519,11 +521,11 @@ namespace YAMLConvDNA
 
             values = new List<List<dynamic>>(values.Skip(1));
 
-            DeleteEmptyRow(ref values, baseIndex);
+            DeleteEmptyRow(ref values, baseIndices);
 
             // base値に重複がないか確認
             var baseDuplicates = values
-                .GroupBy(x => x[baseIndex])
+                .GroupBy(x => BuildBaseKey(x, baseIndices))
                 .Where(x => x.Count() > 1)
                 .Select(x => x.Key)
                 .ToList();
@@ -533,7 +535,7 @@ namespace YAMLConvDNA
                 throw new Exception($"Base値({String.Join(", ", baseDuplicates)})が重複しています");
             }
 
-            SetId(ref values, properties, baseIndex, idIndex);
+            SetId(ref values, properties, baseIndices, idIndex);
 
             //TrimValues(ref values, ref properties);
 

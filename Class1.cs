@@ -292,7 +292,7 @@ namespace YAMLConvDNA
 
                 if (marked)
                 {
-                    _baseIndices.Add(i); // ★ 複数収集
+                    _baseIndices.Add(i); // 複数収集
                 }
                 else if (firstPropertyIndex == null)
                 {
@@ -302,16 +302,36 @@ namespace YAMLConvDNA
                 properties.Add((i, count, identifiers));
             }
 
-            if (firstPropertyIndex == null)
-            {
-                return properties;
-            }
+            //if (firstPropertyIndex == null)
+            //{
+            //    return properties;
+            //}
 
-            // * が一つも無ければ、従来通り「最初の有効ヘッダー」を base に採用
-            if (_baseIndices.Count == 0)
+            // * が一つも無ければ従来どおり先頭の有効列を base に採用
+            if (_baseIndices.Count == 0 && firstPropertyIndex != null)
             {
                 _baseIndices.Add(firstPropertyIndex.Value);
             }
+
+            // base列をidentifier順に安定ソート
+            var identifierMap = properties
+                .Where(p => p.identifier != null)
+                .ToDictionary(
+                    p => p.index,
+                    p => string.Join(".", p.identifier)
+                );
+
+            _baseIndices.Sort((a, b) =>
+            {
+                var nameA = identifierMap[a];
+                var nameB = identifierMap[b];
+
+                int cmp = string.CompareOrdinal(nameA, nameB);
+                if (cmp != 0) return cmp;
+
+                // 同名ヘッダーの保険（ほぼ起きないが美しい）
+                return a.CompareTo(b);
+            });
 
             // 配列幅の確定（番兵を使う既存ロジック）
             properties.Add((values.Count(), 0, null));

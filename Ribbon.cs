@@ -3,7 +3,7 @@ using ExcelDna.Integration.CustomUI;
 using System.Runtime.InteropServices;
 using System.Reflection;
 
-namespace YAMLConvDNA
+namespace YAMLConv
 {
     [ComVisible(true)]
     public class Ribbon : ExcelRibbon

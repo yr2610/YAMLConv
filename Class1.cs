@@ -28,7 +28,7 @@ using CsvHelper;
 using System.Globalization;
 using CsvHelper.Configuration;
 
-namespace YAMLConvDNA
+namespace YAMLConv
 {
     public class MyAddin : IExcelAddIn
     {

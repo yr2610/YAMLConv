@@ -8,8 +8,8 @@
     <ProjectGuid>{1B9A5686-7176-4DB7-9973-BC325806FD8C}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>YAMLConvDNA</RootNamespace>
-    <AssemblyName>YAMLConvDNA</AssemblyName>
+    <RootNamespace>YAMLConv</RootNamespace>
+    <AssemblyName>YAMLConv</AssemblyName>
     <TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
@@ -92,7 +92,7 @@
     <None Include="app.config" />
     <None Include="packages.config" />
     <None Include="Properties\ExcelDna.Build.props" />
-    <None Include="YAMLConvDNA-AddIn.dna" />
+    <None Include="YAMLConv-AddIn.dna" />
   </ItemGroup>
   <ItemGroup>
     <COMReference Include="Microsoft.Office.Core">

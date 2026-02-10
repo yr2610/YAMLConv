@@ -33,6 +33,8 @@ namespace YAMLConv
     public class MyAddin : IExcelAddIn
     {
         public static MyAddin Instance { get; private set; }
+        public bool GenerateId { get; set; } = true;
+        public bool IncludeTsvComment { get; set; } = true;
 
         Office.CommandBarButton exampleMenuItem;
         Application xlApp = (Application)ExcelDnaUtil.Application;
@@ -75,22 +77,6 @@ namespace YAMLConv
         string Yaml { get; set; }
         string TsvComment { get; set; }
 
-        private void TsvCommentCheckBox_CheckedChanged(object sender, EventArgs e)
-        {
-            var checkBox = (System.Windows.Forms.CheckBox)sender;
-
-            string s = "";
-
-            if (checkBox.Checked)
-            {
-                s += TsvComment + "\n";
-            }
-            s += Yaml;
-
-            Clipboard.SetText(s);
-            form.SetText(s);
-        }
-
         private void ConvertSelectionToYaml()
         {
             var selection = xlApp.Selection;
@@ -126,7 +112,7 @@ namespace YAMLConv
             List<Dictionary<string, dynamic>> keyValuePairs;
             try
             {
-                keyValuePairs = tableToKeyValuePairs(values);
+                keyValuePairs = tableToKeyValuePairs(values, GenerateId);
             }
             catch (Exception e)
             {
@@ -159,7 +145,14 @@ namespace YAMLConv
 
             //MessageBox.Show(yaml);
 
-            string s = TsvComment + "\n" + Yaml;
+            string s = "";
+
+            if (IncludeTsvComment)
+            {
+                s += TsvComment + "\n";
+            }
+            s += Yaml;
+
             Clipboard.SetText(s);
             form.SetText(s);
             form.ShowDialog();
@@ -527,7 +520,10 @@ namespace YAMLConv
             }
         }
 
-        static IEnumerable<Dictionary<string, dynamic>> tableToKeyValuePairs(IEnumerable<List<dynamic>> values)
+        static IEnumerable<Dictionary<string, dynamic>> tableToKeyValuePairs(
+            IEnumerable<List<dynamic>> values,
+            bool generateId
+        )
         {
             AddIdColumn(ref values);
 
@@ -567,7 +563,15 @@ namespace YAMLConv
                 throw new Exception($"Base値({String.Join(", ", baseDuplicates)})が重複しています");
             }
 
-            SetId(ref values, properties, baseIndices, idIndex);
+            if (generateId)
+            {
+                SetId(ref values, properties, baseIndices, idIndex);
+            }
+            else
+            {
+                // $id列はヘッダーとしては存在するが、値が入ってない状態になる
+                // もし列自体も消したいなら別対応
+            }
 
             //TrimValues(ref values, ref properties);
 
@@ -649,7 +653,6 @@ namespace YAMLConv
             exampleMenuItem.Click += new Microsoft.Office.Core._CommandBarButtonEvents_ClickEventHandler(exampleMenuItemClick);
 
             form = new Form1();
-            form.TsvCommentCheckBox_CheckedChanged += TsvCommentCheckBox_CheckedChanged;
         }
 
         private void ResetCellMenu()

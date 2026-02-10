@@ -22,6 +22,14 @@ namespace YAMLConv
                           size='large'
                           imageMso='ExportTextFile'
                           onAction='OnToYaml'/>
+                  <toggleButton id='tglGenerateId'
+                                label='Generate $id'
+                                getPressed='GetGenerateId'
+                                onAction='OnToggleGenerateId'/>
+                  <toggleButton id='tglIncludeTsv'
+                                label='Include TSV comment'
+                                getPressed='GetIncludeTsv'
+                                onAction='OnToggleIncludeTsv'/>
                 </group>
               </tab>
             </tabs>
@@ -33,5 +41,28 @@ namespace YAMLConv
         {
             MyAddin.Instance.RunToYamlFromRibbon();
         }
+
+        public bool GetGenerateId(IRibbonControl control)
+        {
+            return MyAddin.Instance != null && MyAddin.Instance.GenerateId;
+        }
+
+        public void OnToggleGenerateId(IRibbonControl control, bool pressed)
+        {
+            if (MyAddin.Instance == null) return;
+            MyAddin.Instance.GenerateId = pressed;
+        }
+
+        public bool GetIncludeTsv(IRibbonControl control)
+        {
+            return MyAddin.Instance != null && MyAddin.Instance.IncludeTsvComment;
+        }
+
+        public void OnToggleIncludeTsv(IRibbonControl control, bool pressed)
+        {
+            if (MyAddin.Instance == null) return;
+            MyAddin.Instance.IncludeTsvComment = pressed;
+        }
+
     }
 }

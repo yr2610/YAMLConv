@@ -18,16 +18,16 @@ namespace YAMLConv
               <tab id='tabYamlConv' label='{projectName}'>
                 <group id='grpYamlConv' label='YAML'>
                   <button id='btnToYaml'
-                          label='to YAML'
+                          label='YAML出力'
                           size='large'
                           imageMso='ExportTextFile'
                           onAction='OnToYaml'/>
                   <checkBox id='tglGenerateId'
-                            label='Generate $id'
+                            label='ID生成'
                             getPressed='GetGenerateId'
                             onAction='OnToggleGenerateId'/>
                   <checkBox id='tglIncludeTsv'
-                            label='Include TSV comment'
+                            label='TSVコメント'
                             getPressed='GetIncludeTsv'
                             onAction='OnToggleIncludeTsv'/>
                 </group>

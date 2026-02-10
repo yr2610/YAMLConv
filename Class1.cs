@@ -32,6 +32,8 @@ namespace YAMLConvDNA
 {
     public class MyAddin : IExcelAddIn
     {
+        public static MyAddin Instance { get; private set; }
+
         Office.CommandBarButton exampleMenuItem;
         Application xlApp = (Application)ExcelDnaUtil.Application;
 
@@ -89,7 +91,7 @@ namespace YAMLConvDNA
             form.SetText(s);
         }
 
-        void exampleMenuItemClick(Microsoft.Office.Core.CommandBarButton Ctrl, ref bool CancelDefault)
+        private void ConvertSelectionToYaml()
         {
             var selection = xlApp.Selection;
 
@@ -164,6 +166,16 @@ namespace YAMLConvDNA
 
             //selectedRange.Worksheet.Cells[firstRow, firstCol].Value = "foo";
             //MessageBox.Show($"{firstCol}, {firstRow}, {numCols}, {numRows}");
+        }
+
+        void exampleMenuItemClick(Microsoft.Office.Core.CommandBarButton Ctrl, ref bool CancelDefault)
+        {
+            ConvertSelectionToYaml();
+        }
+
+        public void RunToYamlFromRibbon()
+        {
+            ConvertSelectionToYaml();
         }
 
         class FlowStyleSequences : ChainedEventEmitter
@@ -627,6 +639,8 @@ namespace YAMLConvDNA
 
         void IExcelAddIn.AutoOpen()
         {
+            Instance = this;
+
             Office.MsoControlType menuItem = Office.MsoControlType.msoControlButton;
             exampleMenuItem = (Office.CommandBarButton)GetCellContextMenu().Controls.Add(menuItem, System.Reflection.Missing.Value, System.Reflection.Missing.Value, 1, true);
 

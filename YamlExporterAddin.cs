@@ -41,7 +41,7 @@ namespace YAMLConv
 
         // XXX: ここで持っておかないとガベコレされることがある
 
-        Form1 form;
+        YamlPreviewForm form;
 
         private Office.CommandBar GetCellContextMenu()
         {
@@ -660,7 +660,7 @@ namespace YAMLConv
             exampleMenuItem.Caption = "to YAML";
             exampleMenuItem.Click += new Microsoft.Office.Core._CommandBarButtonEvents_ClickEventHandler(exampleMenuItemClick);
 
-            form = new Form1();
+            form = new YamlPreviewForm();
         }
 
         private void ResetCellMenu()

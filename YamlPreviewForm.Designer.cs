@@ -1,6 +1,6 @@
 ﻿namespace YAMLConv
 {
-    partial class Form1
+    partial class YamlPreviewForm
     {
         /// <summary>
         /// Required designer variable.

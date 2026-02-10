@@ -10,9 +10,9 @@ using System.Windows.Forms;
 
 namespace YAMLConv
 {
-    public partial class Form1 : Form
+    public partial class YamlPreviewForm : Form
     {
-        public Form1()
+        public YamlPreviewForm()
         {
             InitializeComponent();
         }

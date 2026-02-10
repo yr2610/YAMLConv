@@ -525,12 +525,25 @@ namespace YAMLConv
             bool generateId
         )
         {
-            AddIdColumn(ref values);
+            if (generateId)
+            {
+                AddIdColumn(ref values);
+            }
 
             int idIndex;
             List<int> baseIndices;
 
             var properties = getPropertiesFromHeader(values.First(), out idIndex, out baseIndices);
+
+            // generateId=false なら $id を完全に無視（出力にも載せない）
+            if (!generateId)
+            {
+                properties = properties
+                    .Where(p => !(p.identifier?.Length == 1 && p.identifier[0] == idIdentifier))
+                    .ToList();
+
+                idIndex = -1; // 念のため
+            }            
 
             if (baseIndices == null || baseIndices.Count == 0)
             {
@@ -566,11 +579,6 @@ namespace YAMLConv
             if (generateId)
             {
                 SetId(ref values, properties, baseIndices, idIndex);
-            }
-            else
-            {
-                // $id列はヘッダーとしては存在するが、値が入ってない状態になる
-                // もし列自体も消したいなら別対応
             }
 
             //TrimValues(ref values, ref properties);

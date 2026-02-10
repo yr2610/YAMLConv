@@ -39,29 +39,29 @@ namespace YAMLConv
 
         public void OnToYaml(IRibbonControl control)
         {
-            MyAddin.Instance.RunToYamlFromRibbon();
+            YamlExporterAddin.Instance.RunToYamlFromRibbon();
         }
 
         public bool GetGenerateId(IRibbonControl control)
         {
-            return MyAddin.Instance != null && MyAddin.Instance.GenerateId;
+            return YamlExporterAddin.Instance != null && YamlExporterAddin.Instance.GenerateId;
         }
 
         public void OnToggleGenerateId(IRibbonControl control, bool pressed)
         {
-            if (MyAddin.Instance == null) return;
-            MyAddin.Instance.GenerateId = pressed;
+            if (YamlExporterAddin.Instance == null) return;
+            YamlExporterAddin.Instance.GenerateId = pressed;
         }
 
         public bool GetIncludeTsv(IRibbonControl control)
         {
-            return MyAddin.Instance != null && MyAddin.Instance.IncludeTsvComment;
+            return YamlExporterAddin.Instance != null && YamlExporterAddin.Instance.IncludeTsvComment;
         }
 
         public void OnToggleIncludeTsv(IRibbonControl control, bool pressed)
         {
-            if (MyAddin.Instance == null) return;
-            MyAddin.Instance.IncludeTsvComment = pressed;
+            if (YamlExporterAddin.Instance == null) return;
+            YamlExporterAddin.Instance.IncludeTsvComment = pressed;
         }
 
     }

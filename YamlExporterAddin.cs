@@ -30,9 +30,9 @@ using CsvHelper.Configuration;
 
 namespace YAMLConv
 {
-    public class MyAddin : IExcelAddIn
+    public class YamlExporterAddin : IExcelAddIn
     {
-        public static MyAddin Instance { get; private set; }
+        public static YamlExporterAddin Instance { get; private set; }
         public bool GenerateId { get; set; } = true;
         public bool IncludeTsvComment { get; set; } = true;
 

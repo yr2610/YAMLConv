@@ -564,20 +564,20 @@ namespace YAMLConv
 
             DeleteEmptyRow(ref values, baseIndices);
 
-            // base値に重複がないか確認
-            var baseDuplicates = values
-                .GroupBy(x => BuildBaseKey(x, baseIndices))
-                .Where(x => x.Count() > 1)
-                .Select(x => x.Key)
-                .ToList();
-
-            if (baseDuplicates.Count() > 0)
-            {
-                throw new Exception($"Base値({String.Join(", ", baseDuplicates)})が重複しています");
-            }
-
             if (generateId)
             {
+                // base値に重複がないか確認
+                var baseDuplicates = values
+                    .GroupBy(x => BuildBaseKey(x, baseIndices))
+                    .Where(x => x.Count() > 1)
+                    .Select(x => x.Key)
+                    .ToList();
+
+                if (baseDuplicates.Count() > 0)
+                {
+                    throw new Exception($"Base値({String.Join(", ", baseDuplicates)})が重複しています");
+                }
+
                 SetId(ref values, properties, baseIndices, idIndex);
             }
 

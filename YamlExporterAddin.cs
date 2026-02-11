@@ -36,6 +36,9 @@ namespace YAMLConv
         public bool GenerateId { get; set; } = true;
         public bool IncludeTsvComment { get; set; } = true;
 
+        private const int DefaultIdLength = 16;
+        public int IdLength { get; set; } = DefaultIdLength;
+
         Office.CommandBarButton exampleMenuItem;
         Application xlApp = (Application)ExcelDnaUtil.Application;
 
@@ -403,7 +406,7 @@ namespace YAMLConv
         //    return properties.FirstOrDefault(property => String.Join(".", property.identifier) != idIdentifier);
         //}
 
-        static void SetId(
+        void SetId(
             ref IEnumerable<List<dynamic>> values,
             IEnumerable<(int index, int count, string[] identifier)> properties,
             List<int> baseIndices,
@@ -432,8 +435,7 @@ namespace YAMLConv
                 if (key == null) continue; // 空行相当スキップ
 
                 var hash = GetHash(key);
-                const int idLength = 6;
-                row[idIndex] = hash.Substring(0, idLength);
+                row[idIndex] = hash.Substring(0, IdLength);
             }
 
             // 生成後 $id の重複チェック（可視キーでレポート）
@@ -520,7 +522,7 @@ namespace YAMLConv
             }
         }
 
-        static IEnumerable<Dictionary<string, dynamic>> tableToKeyValuePairs(
+        IEnumerable<Dictionary<string, dynamic>> tableToKeyValuePairs(
             IEnumerable<List<dynamic>> values,
             bool generateId
         )

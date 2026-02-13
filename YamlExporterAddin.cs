@@ -248,14 +248,16 @@ namespace YAMLConv
         const string idIdentifier = "$id";
         const string basePropertyMark = "*";
 
-        static IEnumerable<(int index, int count, string[] identifier)> getPropertiesFromHeader(
+        const char fillPropertyMark = '~';
+
+        static IEnumerable<(int index, int count, string[] identifier, bool isBase, bool isFill)> getPropertiesFromHeader(
             IEnumerable<dynamic> values,
             out int idIndex,
             out List<int> baseIndices
         )
         {
             var _baseIndices = new List<int>();
-            var properties = new List<(int index, int count, string[] identifier)>();
+            var properties = new List<(int index, int count, string[] identifier, bool isBase, bool isFill)>();
 
             idIndex = -1;
             baseIndices = _baseIndices;
@@ -275,9 +277,22 @@ namespace YAMLConv
                 if (s == idIdentifier)
                 {
                     idIndex = i;
-                    properties.Add((i, count, new string[] { s }));
+                    properties.Add((i, count, new string[] { s }, false, false));
                     continue;
                 }
+
+                // 先頭プレフィクスを順不同・複数可で処理（* と ~）
+                // 例: *~category / ~group
+                bool isBase = false;
+                bool isFill = false;
+                int p = 0;
+                while (p < s.Length && (s[p] == basePropertyMark[0] || s[p] == fillPropertyMark))
+                {
+                    if (s[p] == basePropertyMark[0]) isBase = true;
+                    if (s[p] == fillPropertyMark) isFill = true;
+                    p++;
+                }
+                s = s.Substring(p);
 
                 // 配列列（[] 印）
                 const string arrayMark = "[]";
@@ -287,10 +302,6 @@ namespace YAMLConv
                     s = s.Substring(0, s.Length - arrayMark.Length);
                 }
 
-                // * は base 指定（複数可）
-                bool marked = s.StartsWith(basePropertyMark);
-                if (marked) s = s.Substring(1);
-
                 // a.b.c 形式（ASCII 規則は既存どおり）
                 string[] identifiers = s.Split('.');
                 if (!identifiers.All(identifier => Regex.IsMatch(identifier, @"^[_a-zA-Z][_a-zA-Z0-9]*$")))
@@ -298,7 +309,7 @@ namespace YAMLConv
                     continue;
                 }
 
-                if (marked)
+                if (isBase)
                 {
                     _baseIndices.Add(i); // 複数収集
                 }
@@ -307,7 +318,7 @@ namespace YAMLConv
                     firstPropertyIndex = i;
                 }
 
-                properties.Add((i, count, identifiers));
+                properties.Add((i, count, identifiers, isBase, isFill));
             }
 
             //if (firstPropertyIndex == null)
@@ -342,7 +353,7 @@ namespace YAMLConv
             });
 
             // 配列幅の確定（番兵を使う既存ロジック）
-            properties.Add((values.Count(), 0, null));
+            properties.Add((values.Count(), 0, null, false, false));
             for (int i = 0, n = properties.Count - 1; i < n; i++)
             {
                 var property = properties[i];
@@ -388,6 +399,50 @@ namespace YAMLConv
             values = values.Where(x => BuildBaseKey(x, baseIndices) != null);
         }
 
+        // 行が完全に空（全セルが null or ""）のものを除外
+        // MultiDimArrayToJaggedArray は先頭・末尾の連続空行しかトリムしないため、中間もここで落とす
+        static void RemoveFullyEmptyRows(ref IEnumerable<List<dynamic>> values)
+        {
+            values = values.Where(row => !row.All(cell =>
+                cell == null || (cell is string s && s.Length == 0)
+            ));
+        }
+
+        // ~ 指定列のみ、空欄を直上の値で埋める（carry-down）
+        static void ApplyForwardFillForColumns(
+            ref IEnumerable<List<dynamic>> values,
+            IReadOnlyCollection<int> fillTargetIndices
+        )
+        {
+            if (fillTargetIndices == null || fillTargetIndices.Count == 0) return;
+
+            var targets = new HashSet<int>(fillTargetIndices);
+            var last = new Dictionary<int, object>();
+
+            foreach (var row in values)
+            {
+                for (int i = 0; i < row.Count; i++)
+                {
+                    if (!targets.Contains(i)) continue;
+
+                    var cur = row[i];
+                    bool isEmpty = cur == null || (cur is string s && s.Length == 0);
+
+                    if (isEmpty)
+                    {
+                        if (last.TryGetValue(i, out var v) && v != null)
+                        {
+                            row[i] = v;
+                        }
+                    }
+                    else
+                    {
+                        last[i] = cur;
+                    }
+                }
+            }
+        }
+
         //static int GetIdPropertyIndex(IEnumerable<(int index, int count, string[] identifier)> properties)
         //{
         //    var idProperty = properties.FirstOrDefault(property => property.identifier.Length == 1 && property.identifier[0] == idIdentifier);
@@ -408,7 +463,7 @@ namespace YAMLConv
 
         void SetId(
             ref IEnumerable<List<dynamic>> values,
-            IEnumerable<(int index, int count, string[] identifier)> properties,
+            IEnumerable<(int index, int count, string[] identifier, bool isBase, bool isFill)> properties,
             List<int> baseIndices,
             int idIndex
         )
@@ -564,6 +619,19 @@ namespace YAMLConv
 
             values = new List<List<dynamic>>(values.Skip(1));
 
+            // 中間の完全空行を先に除外
+            RemoveFullyEmptyRows(ref values);
+
+            // ~ 指定列だけ carry-down
+            var fillIndices = properties
+                .Where(p => p.identifier != null && p.isFill)
+                .SelectMany(p => (p.count == 0)
+                    ? new int[] { p.index }
+                    : Enumerable.Range(p.index, p.count))
+                .ToList();
+            ApplyForwardFillForColumns(ref values, fillIndices);
+
+            // base が空の行を削除
             DeleteEmptyRow(ref values, baseIndices);
 
             if (generateId)

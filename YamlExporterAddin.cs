@@ -35,6 +35,7 @@ namespace YAMLConv
         public static YamlExporterAddin Instance { get; private set; }
         public bool GenerateId { get; set; } = true;
         public bool IncludeTsvComment { get; set; } = true;
+        public bool ExportVisibleRowsOnly { get; set; } = false;
 
         private const int DefaultIdLength = 16;
         public int IdLength { get; set; } = DefaultIdLength;
@@ -49,6 +50,87 @@ namespace YAMLConv
         private Office.CommandBar GetCellContextMenu()
         {
             return this.xlApp.CommandBars["Cell"];
+        }
+
+        // 選択範囲から「可視行」だけを抽出して 2D 配列に詰め直す
+        // - 非表示（Hidden）
+        // - AutoFilter で隠れている行
+        // - アウトラインで折りたたまれた行
+        // を除外する
+        static object[,] ExtractVisibleRowValues2D(Range selectedRange)
+        {
+            if (selectedRange == null) return null;
+
+            int rows = selectedRange.Rows.Count;
+            int cols = selectedRange.Columns.Count;
+            if (rows <= 0 || cols <= 0) return null;
+
+            var rowBuffers = new List<object[]>();
+
+            for (int r = 1; r <= rows; r++)
+            {
+                Range rowRange = null;
+                try
+                {
+                    rowRange = (Range)selectedRange.Rows[r];
+
+                    // フィルタやグループ折りたたみも Hidden=true になる
+                    bool isHidden = false;
+                    try
+                    {
+                        isHidden = (bool)rowRange.EntireRow.Hidden;
+                    }
+                    catch
+                    {
+                        // 取得に失敗したら念のため対象に含める
+                        isHidden = false;
+                    }
+
+                    if (isHidden) continue;
+
+                    var rowValues = rowRange.Value2;
+                    var buf = new object[cols];
+
+                    if (rowValues == null)
+                    {
+                        // すべて null
+                    }
+                    else if (rowValues.GetType().IsArray)
+                    {
+                        // 1 x cols の object[,] を想定
+                        var arr = (object[,])rowValues;
+                        int rowLb0 = arr.GetLowerBound(0);
+                        int colLb1 = arr.GetLowerBound(1);
+                        for (int c = 0; c < cols; c++)
+                        {
+                            buf[c] = arr[rowLb0, colLb1 + c];
+                        }
+                    }
+                    else
+                    {
+                        // 1セル選択のときはスカラー
+                        buf[0] = rowValues;
+                    }
+
+                    rowBuffers.Add(buf);
+                }
+                finally
+                {
+                    if (rowRange != null) System.Runtime.InteropServices.Marshal.ReleaseComObject(rowRange);
+                }
+            }
+
+            if (rowBuffers.Count == 0) return null;
+
+            var dense = new object[rowBuffers.Count, cols];
+            for (int r = 0; r < rowBuffers.Count; r++)
+            {
+                for (int c = 0; c < cols; c++)
+                {
+                    dense[r, c] = rowBuffers[r][c];
+                }
+            }
+            return dense;
         }
 
         static string JaggedArrayToTsv(IEnumerable<List<dynamic>> array2d)
@@ -90,12 +172,50 @@ namespace YAMLConv
             }
 
             var selectedRange = (Range)selection;
-            var cellValues = selectedRange.Value;
 
-            if (cellValues == null || !cellValues.GetType().IsArray)
+            object[,] cellValues;
+
+            if (ExportVisibleRowsOnly)
             {
-                return;
+                // 可視行のみ対象にする（Hidden / AutoFilter / アウトライン折りたたみ等を尊重）
+                cellValues = ExtractVisibleRowValues2D(selectedRange);
+                if (cellValues == null)
+                {
+                    MessageBox.Show(
+                        "選択範囲に可視行がありません。",
+                        "エラー",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    return;
+                }
             }
+            else
+            {
+                // 既存どおり：選択範囲の全セル（非表示も含む）を対象
+                var v = selectedRange.Value2;
+
+                if (v == null)
+                {
+                    MessageBox.Show(
+                        "選択範囲が空です。",
+                        "エラー",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    return;
+                }
+
+                if (v.GetType().IsArray)
+                {
+                    cellValues = (object[,])v;
+                }
+                else
+                {
+                    // 1セル選択のときはスカラー
+                    cellValues = new object[1, 1];
+                    cellValues[0, 0] = v;
+                }
+            }
+
 
             var values = MultiDimArrayToJaggedArray(cellValues);
 
@@ -107,7 +227,7 @@ namespace YAMLConv
             //int numCols = selectedRange.Columns.Count;
             //int numRows = selectedRange.Rows.Count;
 
-            if (values.Count < 2)
+            if (values.Count() < 2)
             {
                 return;
             }
@@ -115,7 +235,7 @@ namespace YAMLConv
             List<Dictionary<string, dynamic>> keyValuePairs;
             try
             {
-                keyValuePairs = tableToKeyValuePairs(values, GenerateId);
+                keyValuePairs = tableToKeyValuePairs(values, GenerateId).ToList();
             }
             catch (Exception e)
             {
@@ -381,7 +501,7 @@ namespace YAMLConv
             return new List<List<dynamic>>(list);
         }
 
-        //static void TrimValues(ref IEnumerable<List<dynamic>> values, ref IEnumerable<(int index, int count, string[] identifier)> properties)
+        //static void TrimValues(ref IEnumerable<List<dynamic>> values, ref IEnumerable<(int index, int count, string[] identifier, bool isBase, bool isFill)> properties)
         //{
         //    // ヘッダー行（1行目）の左寄りの空欄の列は不要なので削除
         //    int x0 = values.First().FindIndex(n => n != null);
@@ -443,7 +563,7 @@ namespace YAMLConv
             }
         }
 
-        //static int GetIdPropertyIndex(IEnumerable<(int index, int count, string[] identifier)> properties)
+        //static int GetIdPropertyIndex(IEnumerable<(int index, int count, string[] identifier, bool isBase, bool isFill)> properties)
         //{
         //    var idProperty = properties.FirstOrDefault(property => property.identifier.Length == 1 && property.identifier[0] == idIdentifier);
         //
@@ -451,7 +571,7 @@ namespace YAMLConv
         //}
 
         // $id 以外の先頭のプロパティ
-        //static (int index, int count, string[] identifier) GetBaseProperty(IEnumerable<(int index, int count, string[] identifier)> properties)
+        //static (int index, int count, string[] identifier) GetBaseProperty(IEnumerable<(int index, int count, string[] identifier, bool isBase, bool isFill)> properties)
         //{
         //    var marked = properties.FirstOrDefault(property => property.identifier.First().StartsWith(basePropertyMark));
         //    if (marked.identifier != null)
@@ -622,7 +742,7 @@ namespace YAMLConv
             // 中間の完全空行を先に除外
             RemoveFullyEmptyRows(ref values);
 
-            // ~ 指定列だけ carry-down
+            // ~ 指定列だけ carry-down（空欄を直上の値で埋める）
             var fillIndices = properties
                 .Where(p => p.identifier != null && p.isFill)
                 .SelectMany(p => (p.count == 0)
@@ -631,7 +751,7 @@ namespace YAMLConv
                 .ToList();
             ApplyForwardFillForColumns(ref values, fillIndices);
 
-            // base が空の行を削除
+            // base が完全空の行を除外
             DeleteEmptyRow(ref values, baseIndices);
 
             if (generateId)

@@ -31,6 +31,10 @@ namespace YAMLConv
                             label='TSVコメント'
                             getPressed='GetIncludeTsv'
                             onAction='OnToggleIncludeTsv'/>
+                  <checkBox id='tglVisibleOnly'
+                            label='表示行のみ'
+                            getPressed='GetVisibleOnly'
+                            onAction='OnToggleVisibleOnly'/>
                   <dropDown id='idLength'
                             label='ID桁'
                             onAction='OnIdLengthChanged'
@@ -70,6 +74,17 @@ namespace YAMLConv
         {
             if (YamlExporterAddin.Instance == null) return;
             YamlExporterAddin.Instance.IncludeTsvComment = pressed;
+        }
+
+        public bool GetVisibleOnly(IRibbonControl control)
+        {
+            return YamlExporterAddin.Instance != null && YamlExporterAddin.Instance.ExportVisibleRowsOnly;
+        }
+
+        public void OnToggleVisibleOnly(IRibbonControl control, bool pressed)
+        {
+            if (YamlExporterAddin.Instance == null) return;
+            YamlExporterAddin.Instance.ExportVisibleRowsOnly = pressed;
         }
 
         private static readonly int[] IdLengths = { 6, 16 };

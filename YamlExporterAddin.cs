@@ -36,6 +36,7 @@ namespace YAMLConv
         public bool GenerateId { get; set; } = true;
         public bool IncludeTsvComment { get; set; } = true;
         public bool ExportVisibleRowsOnly { get; set; } = false;
+        public bool UseValueGetter { get; set; } = false;
 
         private const int DefaultIdLength = 16;
         public int IdLength { get; set; } = DefaultIdLength;
@@ -57,7 +58,7 @@ namespace YAMLConv
         // - AutoFilter で隠れている行
         // - アウトラインで折りたたまれた行
         // を除外する
-        static object[,] ExtractVisibleRowValues2D(Range selectedRange)
+        static object[,] ExtractVisibleRowValues2D(Range selectedRange, bool useValueGetter)
         {
             if (selectedRange == null) return null;
 
@@ -88,7 +89,7 @@ namespace YAMLConv
 
                     if (isHidden) continue;
 
-                    var rowValues = rowRange.Value2;
+                    var rowValues = useValueGetter ? rowRange.Value : rowRange.Value2;
                     var buf = new object[cols];
 
                     if (rowValues == null)
@@ -178,7 +179,7 @@ namespace YAMLConv
             if (ExportVisibleRowsOnly)
             {
                 // 可視行のみ対象にする（Hidden / AutoFilter / アウトライン折りたたみ等を尊重）
-                cellValues = ExtractVisibleRowValues2D(selectedRange);
+                cellValues = ExtractVisibleRowValues2D(selectedRange, UseValueGetter);
                 if (cellValues == null)
                 {
                     MessageBox.Show(
@@ -192,7 +193,7 @@ namespace YAMLConv
             else
             {
                 // 既存どおり：選択範囲の全セル（非表示も含む）を対象
-                var v = selectedRange.Value2;
+                var v = UseValueGetter ? selectedRange.Value : selectedRange.Value2;
 
                 if (v == null)
                 {

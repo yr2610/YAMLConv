@@ -35,6 +35,10 @@ namespace YAMLConv
                             label='表示行のみ'
                             getPressed='GetVisibleOnly'
                             onAction='OnToggleVisibleOnly'/>
+                  <checkBox id='tglUseValueGetter'
+                            label='値をValueで取得'
+                            getPressed='GetUseValueGetter'
+                            onAction='OnToggleUseValueGetter'/>
                   <dropDown id='idLength'
                             label='ID桁'
                             onAction='OnIdLengthChanged'
@@ -85,6 +89,17 @@ namespace YAMLConv
         {
             if (YamlExporterAddin.Instance == null) return;
             YamlExporterAddin.Instance.ExportVisibleRowsOnly = pressed;
+        }
+
+        public bool GetUseValueGetter(IRibbonControl control)
+        {
+            return YamlExporterAddin.Instance != null && YamlExporterAddin.Instance.UseValueGetter;
+        }
+
+        public void OnToggleUseValueGetter(IRibbonControl control, bool pressed)
+        {
+            if (YamlExporterAddin.Instance == null) return;
+            YamlExporterAddin.Instance.UseValueGetter = pressed;
         }
 
         private static readonly int[] IdLengths = { 6, 16 };
